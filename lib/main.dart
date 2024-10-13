@@ -10,19 +10,14 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Card Matching Game',
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF282A36),
-        primaryColor: const Color(0xFF44475A),
-        cardColor: const Color(0xFF44475A),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(color: Color(0xFFF8F8F2)),
+    return ChangeNotifierProvider(
+      create: (context) => GameLogic(),
+      child: MaterialApp(
+        title: 'Card Matching Game',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
         ),
-      ),
-      home: ChangeNotifierProvider(
-        create: (context) => GameLogic(),
-        child: const GameScreen(),
+        home: const GameScreen(),
       ),
     );
   }
@@ -42,8 +37,6 @@ class GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
-    // Delay accessing the provider using WidgetsBinding
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gameLogic = Provider.of<GameLogic>(context, listen: false);
       controllers = List.generate(
@@ -71,26 +64,50 @@ class GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Card Matching Game'),
-        backgroundColor: const Color(0xFF44475A),
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: GridView.builder(
-              padding: const EdgeInsets.all(16.0),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 4,
-                childAspectRatio: 1,
-                crossAxisSpacing: 10,
-                mainAxisSpacing: 10,
+      body: Consumer<GameLogic>(
+        builder: (context, gameLogic, child) {
+          if (gameLogic.gameOver) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text(
+                    'You Won!',
+                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: () {
+                      gameLogic.resetGame();
+                    },
+                    child: const Text('Play Again'),
+                  ),
+                ],
               ),
-              itemCount: 16,
-              itemBuilder: (context, index) {
-                return CardWidget(index: index);
-              },
-            ),
-          ),
-        ],
+            );
+          }
+
+          return Column(
+            children: [
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.all(16.0),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 4,
+                    childAspectRatio: 1,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
+                  ),
+                  itemCount: 16,
+                  itemBuilder: (context, index) {
+                    return CardWidget(index: index);
+                  },
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -107,7 +124,7 @@ class CardWidget extends StatelessWidget {
       builder: (context, gameLogic, child) {
         final card = gameLogic.cards[index];
         return GestureDetector(
-          onTap: () => gameLogic.flipCard(index, context),
+          onTap: () => gameLogic.flipCard(index),
           child: AnimatedBuilder(
             animation: gameLogic.controllers[index],
             builder: (context, child) {
@@ -122,26 +139,19 @@ class CardWidget extends StatelessWidget {
                   alignment: Alignment.center,
                   transform: Matrix4.identity()..rotateY(3.14159),
                   child: Card(
-                    color: const Color(0xFF6272A4),
+                    color: Colors.white,
                     child: Center(
                       child: Text(
                         card.value,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          color: Color(0xFFF8F8F2),
-                        ),
+                        style: const TextStyle(fontSize: 24),
                       ),
                     ),
                   ),
                 )
                     : Card(
-                  color: const Color(0xFF44475A),
+                  color: Colors.blue,
                   child: const Center(
-                    child: Icon(
-                      Icons.question_mark,
-                      size: 24,
-                      color: Color(0xFFF8F8F2),
-                    ),
+                    child: Icon(Icons.question_mark, size: 24),
                   ),
                 ),
               );
@@ -183,7 +193,7 @@ class GameLogic extends ChangeNotifier {
     notifyListeners();
   }
 
-  void flipCard(int index, BuildContext context) {
+  void flipCard(int index) {
     if (cards[index].isFaceUp || cards[index].isMatched || gameOver) return;
 
     cards[index].isFaceUp = true;
@@ -198,7 +208,7 @@ class GameLogic extends ChangeNotifier {
       if (firstCard.value == secondCard.value) {
         firstCard.isMatched = true;
         secondCard.isMatched = true;
-        checkGameOver(context);
+        checkGameOver();
       } else {
         Future.delayed(const Duration(milliseconds: 500), () {
           firstCard.isFaceUp = false;
@@ -215,34 +225,18 @@ class GameLogic extends ChangeNotifier {
     notifyListeners();
   }
 
-  void checkGameOver(BuildContext context) {
+  void checkGameOver() {
     if (cards.every((card) => card.isMatched)) {
       gameOver = true;
-      showVictoryDialog(context);
+      notifyListeners();
     }
   }
 
-  void showVictoryDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF282A36),
-          title: const Text('You Won!', style: TextStyle(color: Color(0xFFF8F8F2))),
-          content: const Text('Congratulations! You have matched all the cards.',
-              style: TextStyle(color: Color(0xFFF8F8F2))),
-          actions: <Widget>[
-            TextButton(
-              child: const Text('Restart', style: TextStyle(color: Color(0xFF50FA7B))),
-              onPressed: () {
-                Navigator.of(context).pop();
-                initializeGame();
-              },
-            ),
-          ],
-        );
-      },
-    );
+  void resetGame() {
+    initializeGame();
+    for (var controller in controllers) {
+      controller.reset();
+    }
+    notifyListeners();
   }
 }
